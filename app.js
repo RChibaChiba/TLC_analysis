@@ -16,20 +16,22 @@ function loadImage(file) {
   };
   image.src = URL.createObjectURL(file);
 }
-function binaryPixel(index) {
-  const gray = .299*pixels[index] + .587*pixels[index+1] + .114*pixels[index+2];
-  const dark = gray < +$('threshold').value;
-  return $('invert').checked ? dark : !dark;
+function grayPixel(index) {
+  return .299 * pixels[index] + .587 * pixels[index + 1] + .114 * pixels[index + 2];
+}
+function pixelIntensity(index) {
+  const gray = grayPixel(index);
+  return $('invert').checked ? 255 - gray : gray;
 }
 function renderImage() {
   if (!pixels) return;
   const out = document.createElement('canvas'), ctx = out.getContext('2d');
   out.width=imageWidth; out.height=imageHeight;
   const data=ctx.createImageData(imageWidth,imageHeight);
-  for(let i=0;i<pixels.length;i+=4) { const v=binaryPixel(i)?0:255; data.data[i]=data.data[i+1]=data.data[i+2]=v; data.data[i+3]=255; }
+  for(let i=0;i<pixels.length;i+=4) { const v=grayPixel(i); data.data[i]=data.data[i+1]=data.data[i+2]=v; data.data[i+3]=255; }
   ctx.putImageData(data,0,0);
   $('imageArea').className='';
-  $('imageArea').innerHTML='<div id="imageWrap"><canvas id="imageCanvas" width="'+imageWidth+'" height="'+imageHeight+'"></canvas><div id="overlay"></div></div><p class="canvas-note">二値化プレビューです。クリックして短冊を配置できます。</p>';
+  $('imageArea').innerHTML='<div id="imageWrap"><canvas id="imageCanvas" width="'+imageWidth+'" height="'+imageHeight+'"></canvas><div id="overlay"></div></div><p class="canvas-note">グレースケールプレビューです。クリックして短冊を配置できます。</p>';
   $('imageCanvas').getContext('2d').drawImage(out,0,0);
   $('imageCanvas').onclick=e=>{const r=e.currentTarget.getBoundingClientRect(); addStrip((e.clientX-r.left)*imageWidth/r.width)};
   renderStrips(); drawChart();
@@ -50,7 +52,7 @@ function renderStrips() {
 }
 function profile(strip) {
   const values=[], left=Math.max(0,Math.floor(strip.x-strip.width/2)), right=Math.min(imageWidth,Math.ceil(strip.x+strip.width/2));
-  for(let y=0;y<imageHeight;y++){let sum=0;for(let x=left;x<right;x++)if(binaryPixel((y*imageWidth+x)*4))sum++;values.push(sum)}
+  for(let y=0;y<imageHeight;y++){let sum=0;for(let x=left;x<right;x++)sum+=pixelIntensity((y*imageWidth+x)*4);values.push(sum)}
   return values;
 }
 function drawChart() {
@@ -86,6 +88,6 @@ function renderTable() {
   $('tableArea').className='';$('tableArea').innerHTML='<table><thead><tr><th>短冊</th><th>位置 (px)</th><th>Rf*</th><th>高さ</th><th>FWHM</th><th>面積</th><th>R²</th><th>関数</th></tr></thead><tbody>'+results.map(r=>`<tr><td>${r.strip}</td><td class="num">${r.mu.toFixed(1)}</td><td class="num">${(r.mu/(imageHeight-1)).toFixed(3)}</td><td class="num">${r.amp.toFixed(1)}</td><td class="num">${r.fwhm.toFixed(1)}</td><td class="num">${r.area.toFixed(1)}</td><td class="num">${r.r2.toFixed(3)}</td><td>${$('model').value}</td></tr>`).join('')+'</tbody></table>';
 }
 $('file').onchange=e=>e.target.files[0]&&loadImage(e.target.files[0]);
-$('threshold').oninput=()=>{$('thresholdVal').textContent=$('threshold').value;renderImage()}; $('invert').onchange=renderImage;
+$('invert').onchange=()=>{renderImage(); results=[]; renderTable()};
 $('addStrip').onclick=()=>addStrip(imageWidth/2); $('clearStrips').onclick=()=>{strips=[];results=[];renderStrips();drawChart();renderTable()}; $('fit').onclick=runFit;
 $('csv').onclick=()=>{if(!results.length)return;const rows=['Strip,Position_px,Rf,Height,FWHM_px,Area,R2,Model',...results.map(r=>[r.strip,r.mu.toFixed(2),(r.mu/(imageHeight-1)).toFixed(4),r.amp.toFixed(2),r.fwhm.toFixed(2),r.area.toFixed(2),r.r2.toFixed(4),$('model').value].join(','))],a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv'}));a.download='tlc_peak_fit.csv';a.click()};
